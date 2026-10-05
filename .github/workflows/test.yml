@@ -1,0 +1,26 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Xcode project
+        run: brew install xcodegen && xcodegen
+
+      # CI has no signing identity; unit tests and a compile check don't need one.
+      - name: Test
+        run: >
+          xcodebuild test -project NHLWidget.xcodeproj -scheme StandingsTests
+          -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
+
+      - name: Build app and widget
+        run: >
+          xcodebuild build -project NHLWidget.xcodeproj -scheme NHLWidget
+          CODE_SIGNING_ALLOWED=NO
