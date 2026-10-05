@@ -44,9 +44,13 @@ Tests run against `Tests/fixture.json`, a saved standings response, so they need
 
 | Path | Purpose |
 |---|---|
-| `Widget/Standings.swift` | Decoding, conference/division grouping, fetch with cached fallback |
-| `Widget/StandingsWidget.swift` | Timeline provider, tap intents, views |
-| `Widget/Teams.swift` | Favorite-team picker and cached logo loading |
+| `Widget/Standings.swift` | Team model and conference/division grouping |
+| `Widget/NHLAPI.swift` | Standings fetch with cached fallback, cached logo loading |
+| `Widget/Teams.swift` | Favorite-team picker |
+| `Widget/Intents.swift` | Persisted widget state and tap intents |
+| `Widget/Provider.swift` | Timeline entry and provider |
+| `Widget/StandingsView.swift` | Standings and team-detail views |
+| `Widget/StandingsWidget.swift` | Widget entry point |
 | `App/NHLWidgetApp.swift` | Minimal host app (widgets must ship inside an app) |
 | `Tests/` | Unit tests and fixture |
 

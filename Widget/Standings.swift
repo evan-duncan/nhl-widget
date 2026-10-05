@@ -46,17 +46,6 @@ enum Conference: String {
     fileprivate var divisions: [(abbrev: String, name: String)] {
         self == .west ? [("C", "Central"), ("P", "Pacific")] : [("A", "Atlantic"), ("M", "Metropolitan")]
     }
-
-    static var current: Conference {
-        get { UserDefaults.standard.string(forKey: "conference").flatMap(Conference.init) ?? .west }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: "conference") }
-    }
-
-    /// Abbreviation of the team whose detail page is showing, or nil for the standings.
-    static var selectedTeam: String? {
-        get { UserDefaults.standard.string(forKey: "selectedTeam") }
-        set { UserDefaults.standard.set(newValue, forKey: "selectedTeam") }
-    }
 }
 
 struct ConferenceStandings {
@@ -82,34 +71,6 @@ struct ConferenceStandings {
 
     func team(_ abbrev: String) -> Team? {
         (divisions.flatMap(\.teams) + wildCard).first { $0.abbrev == abbrev }
-    }
-
-    static func decode(_ data: Data, conference: Conference) throws -> ConferenceStandings {
-        struct Response: Decodable { let standings: [Team] }
-        let standings = ConferenceStandings(teams: try JSONDecoder().decode(Response.self, from: data).standings, conference: conference)
-        guard standings.divisions.contains(where: { !$0.teams.isEmpty }) else { throw URLError(.cannotParseResponse) }
-        return standings
-    }
-
-    static func fetchData() async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(from: URL(string: "https://api-web.nhle.com/v1/standings/now")!)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-        return data
-    }
-
-    /// Fresh standings when the fetch decodes; otherwise the last good response, with `staleSince` set to when it was saved.
-    static func load(_ conference: Conference,
-                     cacheFile: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-                         .appendingPathComponent("standings.json"),
-                     fetch: () async throws -> Data = ConferenceStandings.fetchData)
-        async -> (standings: ConferenceStandings, staleSince: Date?)? {
-        if let data = try? await fetch(), let standings = try? decode(data, conference: conference) {
-            try? data.write(to: cacheFile)
-            return (standings, nil)
-        }
-        guard let data = try? Data(contentsOf: cacheFile), let standings = try? decode(data, conference: conference) else { return nil }
-        let saved = (try? cacheFile.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        return (standings, saved ?? .distantPast)
     }
 
     static let sample: ConferenceStandings = {

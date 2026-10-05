@@ -1,5 +1,4 @@
 import AppIntents
-import AppKit
 
 enum FavoriteTeam: String, AppEnum {
     case ana = "ANA"
@@ -70,21 +69,4 @@ enum FavoriteTeam: String, AppEnum {
         .wsh: "Washington Capitals",
         .wpg: "Winnipeg Jets",
     ]
-}
-
-enum Logos {
-    static func url(_ abbrev: String) -> URL {
-        URL(string: "https://assets.nhle.com/logos/nhl/svg/\(abbrev)_light.svg")!
-    }
-
-    /// Logos rarely change, so each is downloaded once and kept in Caches; every tap reloads the timeline.
-    static func image(_ abbrev: String,
-                      cacheDir: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]) async -> NSImage? {
-        let file = cacheDir.appendingPathComponent("\(abbrev).svg")
-        if let data = try? Data(contentsOf: file) { return NSImage(data: data) }
-        guard let (data, response) = try? await URLSession.shared.data(from: url(abbrev)),
-              (response as? HTTPURLResponse)?.statusCode == 200, let image = NSImage(data: data) else { return nil }
-        try? data.write(to: file)
-        return image
-    }
 }
