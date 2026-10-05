@@ -55,7 +55,7 @@ struct StandingsView: View {
                 rows(s.divisions[0].teams)
                 ForEach(s.divisions.dropFirst(), id: \.name) { section($0.name, $0.teams) }
                 section("Wild Card", Array(s.wildCard.prefix(2)))
-                Divider()
+                Rectangle().fill(.secondary).frame(height: 2).padding(.vertical, 1)
                 rows(Array(s.wildCard.dropFirst(2)))
             }
             .font(.system(size: 11).monospacedDigit())
