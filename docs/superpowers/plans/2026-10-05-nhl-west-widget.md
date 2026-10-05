@@ -10,6 +10,28 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-05-nhl-west-widget-design.md`
 
+## Status: complete, superseded by later work
+
+Tasks 1 and 2 shipped in `0f6b791`. Their code blocks below are the original West-only version and
+are kept as a record; the source tree and the spec describe the current design. Changes made after
+this plan, without a separate plan document:
+
+| Commit | Change |
+|---|---|
+| `2c40c7e` | Type hierarchy: 12pt bold section headings above 11pt team rows; row spacing removed to fit |
+| `96888a5` | Both conferences: `ConferenceStandings` replaces `WestStandings`; `SwitchConference` intent behind ‹ › in a full-width header; column labels moved to the first division row |
+| `86ac7fd` | 2pt wild-card cutoff rule instead of a hairline `Divider` |
+| `6383b91` | Favorite Team picker (`AppIntentConfiguration`, `FavoriteTeam` enum); team logo behind the content, full color in glass mode; extension `CFBundleVersion` tied to `CURRENT_PROJECT_VERSION` (fixed stale `chronod` descriptor that broke the conference buttons); macOS 15 deployment target |
+| `31147e3` | Team detail page via `ShowTeam` / `ShowStandings` intents; content top-aligned; logo disk cache. Per-row logos were tried and removed (unreadable, slow taps) |
+| `68b8809` | Last good standings cached and shown with a save-time badge on failure; favorite team row highlighted. A points-from-playoff-line column was tried and removed |
+| `bc0f292` | README and MIT license |
+
+Rulings made while executing this plan:
+
+- Task 1: `scheme: {}` produced a scheme with no test action; used `scheme: testTargets: [StandingsTests]`.
+- No worktree or per-task commits: the repo had no commits and the user had not asked for any; work
+  was committed when requested.
+
 ## Global Constraints
 
 - Team `U3Q35XKQ69`, `CODE_SIGN_STYLE: Automatic`, deployment target macOS 14.0.
