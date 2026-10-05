@@ -28,14 +28,18 @@ struct StandingsView: View {
 
     var body: some View {
         if let s = entry.standings {
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 1) {
-                GridRow {
-                    Text("Western Conference").font(.headline).frame(maxWidth: .infinity, alignment: .leading)
-                    Text("GP").gridColumnAlignment(.trailing)
-                    Text("W-L-OT").gridColumnAlignment(.trailing)
-                    Text("PTS").gridColumnAlignment(.trailing)
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 0) {
+                GridRow(alignment: .lastTextBaseline) {
+                    Text("Western Conference").font(.system(size: 14, weight: .bold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Group {
+                        Text("GP").gridColumnAlignment(.trailing)
+                        Text("W-L-OT").gridColumnAlignment(.trailing)
+                        Text("PTS").gridColumnAlignment(.trailing)
+                    }
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
                 }
-                .foregroundStyle(.secondary)
                 section("Central", s.central)
                 section("Pacific", s.pacific)
                 section("Wild Card", Array(s.wildCard.prefix(2)))
@@ -50,17 +54,17 @@ struct StandingsView: View {
 
     @ViewBuilder
     private func section(_ title: String, _ teams: [Team]) -> some View {
-        Text(title).font(.caption.bold()).foregroundStyle(.secondary).padding(.top, 3)
+        Text(title).font(.system(size: 12, weight: .bold)).padding(.top, 3)
         rows(teams)
     }
 
     private func rows(_ teams: [Team]) -> some View {
         ForEach(teams, id: \.abbrev) { t in
             GridRow {
-                Text(t.abbrev).bold()
-                Text("\(t.gamesPlayed)")
-                Text("\(t.wins)-\(t.losses)-\(t.otLosses)")
-                Text("\(t.points)").bold()
+                Text(t.abbrev).padding(.leading, 6)
+                Text("\(t.gamesPlayed)").foregroundStyle(.secondary)
+                Text("\(t.wins)-\(t.losses)-\(t.otLosses)").foregroundStyle(.secondary)
+                Text("\(t.points)").fontWeight(.semibold)
             }
         }
     }
