@@ -53,6 +53,29 @@ final class StandingsTests: XCTestCase {
         XCTAssertEqual(image?.size, NSSize(width: 10, height: 10))
     }
 
+    func testLoadCachesAndFallsBack() async throws {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "fixture", withExtension: "json"))
+        let fixtureData = try Data(contentsOf: url)
+        let cache = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
+
+        let freshResult = await ConferenceStandings.load(.west, cacheFile: cache) { fixtureData }
+        let fresh = try XCTUnwrap(freshResult)
+        XCTAssertNil(fresh.staleSince)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cache.path))
+
+        let staleResult = await ConferenceStandings.load(.west, cacheFile: cache) { throw URLError(.notConnectedToInternet) }
+        let stale = try XCTUnwrap(staleResult)
+        XCTAssertNotNil(stale.staleSince)
+        XCTAssertEqual(stale.standings.divisions[0].teams.map(\.abbrev), ["COL", "MIN", "UTA"])
+
+        let badResult = await ConferenceStandings.load(.west, cacheFile: cache) { Data("<html>".utf8) }
+        XCTAssertNotNil(try XCTUnwrap(badResult).staleSince)
+
+        try FileManager.default.removeItem(at: cache)
+        let none = await ConferenceStandings.load(.west, cacheFile: cache) { throw URLError(.notConnectedToInternet) }
+        XCTAssertNil(none)
+    }
+
     func testToggled() {
         XCTAssertEqual(Conference.west.toggled, .east)
         XCTAssertEqual(Conference.east.toggled, .west)

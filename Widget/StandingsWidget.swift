@@ -48,6 +48,8 @@ struct Entry: TimelineEntry {
     let standings: ConferenceStandings?
     var team: Team? = nil
     var logo: NSImage? = nil
+    var staleSince: Date? = nil
+    var favorite: String? = nil
 }
 
 struct Provider: AppIntentTimelineProvider {
@@ -59,14 +61,16 @@ struct Provider: AppIntentTimelineProvider {
 
     func timeline(for configuration: StandingsConfig, in context: Context) async -> Timeline<Entry> {
         let conference = Conference.current
-        let standings = try? await ConferenceStandings.fetch(conference)
+        let loaded = await ConferenceStandings.load(conference)
+        let standings = loaded?.standings
         let team = Conference.selectedTeam.flatMap { standings?.team($0) }
         // Detail page shows the selected team's logo; standings show the favorite's.
         let backgroundTeam = team?.abbrev ?? configuration.team?.rawValue
         var logo: NSImage?
         if let backgroundTeam { logo = await Logos.image(backgroundTeam) }
-        let minutes: Double = standings == nil ? 15 : 30
-        return Timeline(entries: [Entry(date: .now, conference: conference, standings: standings, team: team, logo: logo)],
+        let minutes: Double = loaded?.staleSince == nil && standings != nil ? 30 : 15
+        return Timeline(entries: [Entry(date: .now, conference: conference, standings: standings, team: team, logo: logo,
+                                        staleSince: loaded?.staleSince, favorite: configuration.team?.rawValue)],
                         policy: .after(.now.addingTimeInterval(minutes * 60)))
     }
 }
@@ -120,11 +124,22 @@ struct StandingsView: View {
         }
     }
 
+    /// Header title plus, when showing cached data after a failed fetch, the time that data was saved.
+    private func title(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            Text(text)
+            if let since = entry.staleSince {
+                Label(since.formatted(date: .omitted, time: .shortened), systemImage: "clock")
+                    .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var header: some View {
         HStack {
             Button(intent: SwitchConference()) { Image(systemName: "chevron.left") }
             Spacer()
-            Text(entry.conference.name)
+            title(entry.conference.name)
             Spacer()
             Button(intent: SwitchConference()) { Image(systemName: "chevron.right") }
         }
@@ -135,7 +150,7 @@ struct StandingsView: View {
     private func detail(_ t: Team) -> some View {
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 0) {
             ZStack {
-                Text(t.name)
+                title(t.name)
                 HStack {
                     Button(intent: ShowStandings()) { Image(systemName: "chevron.left") }.buttonStyle(.plain)
                     Spacer()
@@ -182,12 +197,19 @@ struct StandingsView: View {
 
     private func rows(_ teams: [Team]) -> some View {
         ForEach(teams, id: \.abbrev) { t in
+            // Favorite team: accent-colored name and bold, full-strength stats.
+            let favorite = t.abbrev == entry.favorite
+            let stat: HierarchicalShapeStyle = favorite ? .primary : .secondary
             GridRow {
-                Button(intent: ShowTeam(t.abbrev)) { Text(t.abbrev) }.buttonStyle(.plain).padding(.leading, 6)
-                Text("\(t.gamesPlayed)").foregroundStyle(.secondary)
-                Text("\(t.wins)-\(t.losses)-\(t.otLosses)").foregroundStyle(.secondary)
-                Text("\(t.points)").fontWeight(.semibold)
+                Button(intent: ShowTeam(t.abbrev)) {
+                    Text(t.abbrev).foregroundStyle(favorite ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                }
+                .buttonStyle(.plain).padding(.leading, 6)
+                Text("\(t.gamesPlayed)").foregroundStyle(stat)
+                Text("\(t.wins)-\(t.losses)-\(t.otLosses)").foregroundStyle(stat)
+                Text("\(t.points)").fontWeight(favorite ? .heavy : .semibold)
             }
+            .fontWeight(favorite ? .bold : nil)
         }
     }
 }

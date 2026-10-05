@@ -91,10 +91,25 @@ struct ConferenceStandings {
         return standings
     }
 
-    static func fetch(_ conference: Conference) async throws -> ConferenceStandings {
+    static func fetchData() async throws -> Data {
         let (data, response) = try await URLSession.shared.data(from: URL(string: "https://api-web.nhle.com/v1/standings/now")!)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-        return try decode(data, conference: conference)
+        return data
+    }
+
+    /// Fresh standings when the fetch decodes; otherwise the last good response, with `staleSince` set to when it was saved.
+    static func load(_ conference: Conference,
+                     cacheFile: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                         .appendingPathComponent("standings.json"),
+                     fetch: () async throws -> Data = ConferenceStandings.fetchData)
+        async -> (standings: ConferenceStandings, staleSince: Date?)? {
+        if let data = try? await fetch(), let standings = try? decode(data, conference: conference) {
+            try? data.write(to: cacheFile)
+            return (standings, nil)
+        }
+        guard let data = try? Data(contentsOf: cacheFile), let standings = try? decode(data, conference: conference) else { return nil }
+        let saved = (try? cacheFile.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        return (standings, saved ?? .distantPast)
     }
 
     static let sample: ConferenceStandings = {
