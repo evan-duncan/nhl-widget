@@ -11,27 +11,37 @@ struct SwitchConference: AppIntent {
     }
 }
 
+struct StandingsConfig: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "NHL Standings"
+
+    @Parameter(title: "Favorite Team")
+    var team: FavoriteTeam?
+}
+
 struct Entry: TimelineEntry {
     let date: Date
     let conference: Conference
     let standings: ConferenceStandings?
+    var logo: NSImage? = nil
 }
 
-struct Provider: TimelineProvider {
+struct Provider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> Entry { Entry(date: .now, conference: .west, standings: .sample) }
 
-    func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
-        completion(placeholder(in: context))
+    func snapshot(for configuration: StandingsConfig, in context: Context) async -> Entry {
+        placeholder(in: context)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
-        Task {
-            let conference = Conference.current
-            let standings = try? await ConferenceStandings.fetch(conference)
-            let minutes: Double = standings == nil ? 15 : 30
-            completion(Timeline(entries: [Entry(date: .now, conference: conference, standings: standings)],
-                                policy: .after(.now.addingTimeInterval(minutes * 60))))
+    func timeline(for configuration: StandingsConfig, in context: Context) async -> Timeline<Entry> {
+        let conference = Conference.current
+        let standings = try? await ConferenceStandings.fetch(conference)
+        var logo: NSImage?
+        if let team = configuration.team, let (data, _) = try? await URLSession.shared.data(from: team.logoURL) {
+            logo = NSImage(data: data)
         }
+        let minutes: Double = standings == nil ? 15 : 30
+        return Timeline(entries: [Entry(date: .now, conference: conference, standings: standings, logo: logo)],
+                        policy: .after(.now.addingTimeInterval(minutes * 60)))
     }
 }
 
@@ -39,6 +49,18 @@ struct StandingsView: View {
     let entry: Entry
 
     var body: some View {
+        // Logo lives in the content layer, not containerBackground, so it survives glass/tinted modes
+        // where the system removes the background.
+        content.background {
+            if let logo = entry.logo {
+                Image(nsImage: logo).resizable().widgetAccentedRenderingMode(.fullColor)
+                    .scaledToFit().padding(8).opacity(0.2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if let s = entry.standings {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 0) {
                 header.padding(.bottom, 6)
@@ -106,7 +128,7 @@ struct StandingsView: View {
 @main
 struct StandingsWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "StandingsWidget", provider: Provider()) { entry in
+        AppIntentConfiguration(kind: "StandingsWidget", intent: StandingsConfig.self, provider: Provider()) { entry in
             StandingsView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("NHL Standings")

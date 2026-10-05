@@ -21,6 +21,14 @@ final class StandingsTests: XCTestCase {
         XCTAssertEqual(s.wildCard.map(\.abbrev), ["OTT", "NYI", "WSH", "CBJ", "BUF", "TBL", "NJD", "TOR", "PHI", "DET"])
     }
 
+    func testFavoriteTeamsMatchLeague() throws {
+        struct Response: Decodable { let standings: [Team] }
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "fixture", withExtension: "json"))
+        let league = try JSONDecoder().decode(Response.self, from: Data(contentsOf: url)).standings.map(\.abbrev)
+        XCTAssertEqual(Set(FavoriteTeam.allCases.map(\.rawValue)), Set(league))
+        XCTAssertEqual(FavoriteTeam.col.logoURL.absoluteString, "https://assets.nhle.com/logos/nhl/svg/COL_light.svg")
+    }
+
     func testToggled() {
         XCTAssertEqual(Conference.west.toggled, .east)
         XCTAssertEqual(Conference.east.toggled, .west)
