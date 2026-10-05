@@ -2,34 +2,56 @@ import AppKit
 import WidgetKit
 
 struct Entry: TimelineEntry {
+    enum Content {
+        case standings(StandingsViewModel)
+        case detail(TeamDetailViewModel)
+        /// No fresh or cached standings; the header still shows the conference so it can be switched.
+        case failed(title: String)
+    }
+
     let date: Date
-    let conference: Conference
-    let standings: ConferenceStandings?
-    var team: Team? = nil
+    let content: Content
     var logo: NSImage? = nil
-    var staleSince: Date? = nil
-    var favorite: String? = nil
+    /// False when showing cached data or nothing, so the timeline retries sooner.
+    var isFresh = true
 }
 
 struct Provider: AppIntentTimelineProvider {
-    func placeholder(in context: Context) -> Entry { Entry(date: .now, conference: .west, standings: .sample) }
+    var standingsService: any StandingsService = NHLStandingsService()
+    var logoService: any LogoService = NHLLogoService()
+    var state: any WidgetStateStore = UserDefaultsWidgetState()
+
+    func placeholder(in context: Context) -> Entry {
+        Entry(date: .now, content: .standings(StandingsViewModel(standings: .sample, favorite: nil, staleSince: nil)))
+    }
 
     func snapshot(for configuration: StandingsConfig, in context: Context) async -> Entry {
         placeholder(in: context)
     }
 
     func timeline(for configuration: StandingsConfig, in context: Context) async -> Timeline<Entry> {
-        let conference = WidgetState.conference
-        let loaded = await ConferenceStandings.load(conference)
-        let standings = loaded?.standings
-        let team = WidgetState.selectedTeam.flatMap { standings?.team($0) }
+        let entry = await entry(favorite: configuration.team?.rawValue)
+        let minutes: Double = entry.isFresh ? 30 : 15
+        return Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(minutes * 60)))
+    }
+
+    func entry(favorite: String?) async -> Entry {
+        let conference = state.conference
+        guard let loaded = await standingsService.load(conference) else {
+            return Entry(date: .now, content: .failed(title: conference.name), logo: await logo(favorite), isFresh: false)
+        }
+        let isFresh = loaded.staleSince == nil
         // Detail page shows the selected team's logo; standings show the favorite's.
-        let backgroundTeam = team?.abbrev ?? configuration.team?.rawValue
-        var logo: NSImage?
-        if let backgroundTeam { logo = await Logos.image(backgroundTeam) }
-        let minutes: Double = loaded?.staleSince == nil && standings != nil ? 30 : 15
-        return Timeline(entries: [Entry(date: .now, conference: conference, standings: standings, team: team, logo: logo,
-                                        staleSince: loaded?.staleSince, favorite: configuration.team?.rawValue)],
-                        policy: .after(.now.addingTimeInterval(minutes * 60)))
+        if let team = state.selectedTeam.flatMap(loaded.standings.team) {
+            return Entry(date: .now, content: .detail(TeamDetailViewModel(team: team, staleSince: loaded.staleSince)),
+                         logo: await logo(team.abbrev), isFresh: isFresh)
+        }
+        let model = StandingsViewModel(standings: loaded.standings, favorite: favorite, staleSince: loaded.staleSince)
+        return Entry(date: .now, content: .standings(model), logo: await logo(favorite), isFresh: isFresh)
+    }
+
+    private func logo(_ abbrev: String?) async -> NSImage? {
+        guard let abbrev else { return nil }
+        return await logoService.image(abbrev)
     }
 }

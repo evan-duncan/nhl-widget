@@ -45,11 +45,12 @@ Tests run against `Tests/fixture.json`, a saved standings response, so they need
 | Path | Purpose |
 |---|---|
 | `Widget/Standings.swift` | Team model and conference/division grouping |
-| `Widget/NHLAPI.swift` | Standings fetch with cached fallback, cached logo loading |
+| `Widget/NHLAPI.swift` | `StandingsService`/`LogoService` protocols and NHL API implementations with caching |
 | `Widget/Teams.swift` | Favorite-team picker |
-| `Widget/Intents.swift` | Persisted widget state and tap intents |
-| `Widget/Provider.swift` | Timeline entry and provider |
-| `Widget/StandingsView.swift` | Standings and team-detail views |
+| `Widget/Intents.swift` | `WidgetStateStore` (UserDefaults) and tap intents |
+| `Widget/ViewModels.swift` | Display-ready standings and team-detail view models |
+| `Widget/Provider.swift` | Timeline provider; builds view models from injected services |
+| `Widget/StandingsView.swift` | Renders the view models |
 | `Widget/StandingsWidget.swift` | Widget entry point |
 | `App/NHLWidgetApp.swift` | Minimal host app (widgets must ship inside an app) |
 | `Tests/` | Unit tests and fixture |

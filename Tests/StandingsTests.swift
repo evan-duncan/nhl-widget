@@ -26,7 +26,7 @@ final class StandingsTests: XCTestCase {
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "fixture", withExtension: "json"))
         let league = try JSONDecoder().decode(Response.self, from: Data(contentsOf: url)).standings.map(\.abbrev)
         XCTAssertEqual(Set(FavoriteTeam.allCases.map(\.rawValue)), Set(league))
-        XCTAssertEqual(Logos.url("COL").absoluteString, "https://assets.nhle.com/logos/nhl/svg/COL_light.svg")
+        XCTAssertEqual(NHLLogoService.url("COL").absoluteString, "https://assets.nhle.com/logos/nhl/svg/COL_light.svg")
     }
 
     func testTeamDetails() throws {
@@ -49,7 +49,7 @@ final class StandingsTests: XCTestCase {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let svg = #"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>"#
         try Data(svg.utf8).write(to: dir.appendingPathComponent("ZZZ.svg"))
-        let image = await Logos.image("ZZZ", cacheDir: dir)
+        let image = await NHLLogoService(cacheDir: dir).image("ZZZ")
         XCTAssertEqual(image?.size, NSSize(width: 10, height: 10))
     }
 
@@ -58,21 +58,21 @@ final class StandingsTests: XCTestCase {
         let fixtureData = try Data(contentsOf: url)
         let cache = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
 
-        let freshResult = await ConferenceStandings.load(.west, cacheFile: cache) { fixtureData }
+        let freshResult = await NHLStandingsService(cacheFile: cache) { fixtureData }.load(.west)
         let fresh = try XCTUnwrap(freshResult)
         XCTAssertNil(fresh.staleSince)
         XCTAssertTrue(FileManager.default.fileExists(atPath: cache.path))
 
-        let staleResult = await ConferenceStandings.load(.west, cacheFile: cache) { throw URLError(.notConnectedToInternet) }
+        let staleResult = await NHLStandingsService(cacheFile: cache) { throw URLError(.notConnectedToInternet) }.load(.west)
         let stale = try XCTUnwrap(staleResult)
         XCTAssertNotNil(stale.staleSince)
         XCTAssertEqual(stale.standings.divisions[0].teams.map(\.abbrev), ["COL", "MIN", "UTA"])
 
-        let badResult = await ConferenceStandings.load(.west, cacheFile: cache) { Data("<html>".utf8) }
+        let badResult = await NHLStandingsService(cacheFile: cache) { Data("<html>".utf8) }.load(.west)
         XCTAssertNotNil(try XCTUnwrap(badResult).staleSince)
 
         try FileManager.default.removeItem(at: cache)
-        let none = await ConferenceStandings.load(.west, cacheFile: cache) { throw URLError(.notConnectedToInternet) }
+        let none = await NHLStandingsService(cacheFile: cache) { throw URLError(.notConnectedToInternet) }.load(.west)
         XCTAssertNil(none)
     }
 
