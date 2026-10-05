@@ -37,7 +37,7 @@ targets:
     info:
       path: Widget/Info.plist
       properties:
-        CFBundleDisplayName: West Standings
+        CFBundleDisplayName: NHL Standings
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:

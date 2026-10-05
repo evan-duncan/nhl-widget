@@ -1,13 +1,24 @@
+import AppIntents
 import SwiftUI
 import WidgetKit
 
+struct SwitchConference: AppIntent {
+    static var title: LocalizedStringResource = "Switch Conference"
+
+    func perform() async throws -> some IntentResult {
+        Conference.current = Conference.current.toggled
+        return .result()
+    }
+}
+
 struct Entry: TimelineEntry {
     let date: Date
-    let standings: WestStandings?
+    let conference: Conference
+    let standings: ConferenceStandings?
 }
 
 struct Provider: TimelineProvider {
-    func placeholder(in context: Context) -> Entry { Entry(date: .now, standings: .sample) }
+    func placeholder(in context: Context) -> Entry { Entry(date: .now, conference: .west, standings: .sample) }
 
     func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
         completion(placeholder(in: context))
@@ -15,9 +26,10 @@ struct Provider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
         Task {
-            let standings = try? await WestStandings.fetch()
+            let conference = Conference.current
+            let standings = try? await ConferenceStandings.fetch(conference)
             let minutes: Double = standings == nil ? 15 : 30
-            completion(Timeline(entries: [Entry(date: .now, standings: standings)],
+            completion(Timeline(entries: [Entry(date: .now, conference: conference, standings: standings)],
                                 policy: .after(.now.addingTimeInterval(minutes * 60))))
         }
     }
@@ -29,9 +41,9 @@ struct StandingsView: View {
     var body: some View {
         if let s = entry.standings {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 0) {
+                header.padding(.bottom, 6)
                 GridRow(alignment: .lastTextBaseline) {
-                    Text("Western Conference").font(.system(size: 14, weight: .bold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    sectionTitle(s.divisions[0].name).frame(maxWidth: .infinity, alignment: .leading)
                     Group {
                         Text("GP").gridColumnAlignment(.trailing)
                         Text("W-L-OT").gridColumnAlignment(.trailing)
@@ -40,22 +52,43 @@ struct StandingsView: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
                 }
-                section("Central", s.central)
-                section("Pacific", s.pacific)
+                rows(s.divisions[0].teams)
+                ForEach(s.divisions.dropFirst(), id: \.name) { section($0.name, $0.teams) }
                 section("Wild Card", Array(s.wildCard.prefix(2)))
                 Divider()
                 rows(Array(s.wildCard.dropFirst(2)))
             }
             .font(.system(size: 11).monospacedDigit())
         } else {
-            Text("Couldn't load standings").foregroundStyle(.secondary)
+            VStack(alignment: .leading) {
+                header
+                Spacer()
+                Text("Couldn't load standings").foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                Spacer()
+            }
         }
+    }
+
+    private var header: some View {
+        HStack {
+            Button(intent: SwitchConference()) { Image(systemName: "chevron.left") }
+            Spacer()
+            Text(entry.conference.name)
+            Spacer()
+            Button(intent: SwitchConference()) { Image(systemName: "chevron.right") }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 14, weight: .bold))
     }
 
     @ViewBuilder
     private func section(_ title: String, _ teams: [Team]) -> some View {
-        Text(title).font(.system(size: 12, weight: .bold)).padding(.top, 3)
+        sectionTitle(title)
         rows(teams)
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title).font(.system(size: 12, weight: .bold)).padding(.top, 3)
     }
 
     private func rows(_ teams: [Team]) -> some View {
@@ -76,8 +109,8 @@ struct StandingsWidget: Widget {
         StaticConfiguration(kind: "StandingsWidget", provider: Provider()) { entry in
             StandingsView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("West Standings")
-        .description("NHL Western Conference wild-card standings.")
+        .configurationDisplayName("NHL Standings")
+        .description("NHL wild-card standings. Tap the arrows to switch conference.")
         .supportedFamilies([.systemLarge])
     }
 }
