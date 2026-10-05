@@ -1,0 +1,50 @@
+name: NHLWidget
+options:
+  bundleIdPrefix: com.evanduncan
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: U3Q35XKQ69
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  StandingsTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [Tests, Widget/Standings.swift]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    scheme:
+      testTargets: [StandingsTests]
+  NHLWidget:
+    type: application
+    platform: macOS
+    sources: [App]
+    dependencies:
+      - target: StandingsWidget
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.evanduncan.NHLWidget
+  StandingsWidget:
+    type: app-extension
+    platform: macOS
+    sources: [Widget]
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: West Standings
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/StandingsWidget.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.evanduncan.NHLWidget.StandingsWidget
