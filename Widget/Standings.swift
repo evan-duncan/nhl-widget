@@ -14,7 +14,27 @@ struct Team: Decodable, Hashable {
     let otLosses: Int
     let points: Int
 
+    // Detail-page fields. `var` with defaults keeps the sample's memberwise init short; decoding still requires them.
+    var teamName = Localized(default: "")
+    var pointPctg = 0.0
+    var goalFor = 0
+    var goalAgainst = 0
+    var goalDifferential = 0
+    var homeWins = 0, homeLosses = 0, homeOtLosses = 0
+    var roadWins = 0, roadLosses = 0, roadOtLosses = 0
+    var l10Wins = 0, l10Losses = 0, l10OtLosses = 0
+    var streakCode: String? = nil
+    var streakCount: Int? = nil
+    var conferenceSequence = 0
+    var leagueSequence = 0
+
     var abbrev: String { teamAbbrev.default }
+    var name: String { teamName.default }
+    var record: String { "\(wins)-\(losses)-\(otLosses)" }
+    var homeRecord: String { "\(homeWins)-\(homeLosses)-\(homeOtLosses)" }
+    var roadRecord: String { "\(roadWins)-\(roadLosses)-\(roadOtLosses)" }
+    var lastTenRecord: String { "\(l10Wins)-\(l10Losses)-\(l10OtLosses)" }
+    var streak: String { streakCode.map { "\($0)\(streakCount ?? 0)" } ?? "–" }
 }
 
 enum Conference: String {
@@ -30,6 +50,12 @@ enum Conference: String {
     static var current: Conference {
         get { UserDefaults.standard.string(forKey: "conference").flatMap(Conference.init) ?? .west }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "conference") }
+    }
+
+    /// Abbreviation of the team whose detail page is showing, or nil for the standings.
+    static var selectedTeam: String? {
+        get { UserDefaults.standard.string(forKey: "selectedTeam") }
+        set { UserDefaults.standard.set(newValue, forKey: "selectedTeam") }
     }
 }
 
@@ -52,6 +78,10 @@ struct ConferenceStandings {
                          .sorted { $0.divisionSequence < $1.divisionSequence })
         }
         wildCard = mine.filter { $0.wildcardSequence > 0 }.sorted { $0.wildcardSequence < $1.wildcardSequence }
+    }
+
+    func team(_ abbrev: String) -> Team? {
+        (divisions.flatMap(\.teams) + wildCard).first { $0.abbrev == abbrev }
     }
 
     static func decode(_ data: Data, conference: Conference) throws -> ConferenceStandings {

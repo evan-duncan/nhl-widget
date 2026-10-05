@@ -11,6 +11,30 @@ struct SwitchConference: AppIntent {
     }
 }
 
+struct ShowTeam: AppIntent {
+    static var title: LocalizedStringResource = "Show Team"
+
+    @Parameter(title: "Team")
+    var abbrev: String
+
+    init() {}
+    init(_ abbrev: String) { self.abbrev = abbrev }
+
+    func perform() async throws -> some IntentResult {
+        Conference.selectedTeam = abbrev
+        return .result()
+    }
+}
+
+struct ShowStandings: AppIntent {
+    static var title: LocalizedStringResource = "Show Standings"
+
+    func perform() async throws -> some IntentResult {
+        Conference.selectedTeam = nil
+        return .result()
+    }
+}
+
 struct StandingsConfig: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "NHL Standings"
 
@@ -22,6 +46,7 @@ struct Entry: TimelineEntry {
     let date: Date
     let conference: Conference
     let standings: ConferenceStandings?
+    var team: Team? = nil
     var logo: NSImage? = nil
 }
 
@@ -35,12 +60,13 @@ struct Provider: AppIntentTimelineProvider {
     func timeline(for configuration: StandingsConfig, in context: Context) async -> Timeline<Entry> {
         let conference = Conference.current
         let standings = try? await ConferenceStandings.fetch(conference)
+        let team = Conference.selectedTeam.flatMap { standings?.team($0) }
+        // Detail page shows the selected team's logo; standings show the favorite's.
+        let backgroundTeam = team?.abbrev ?? configuration.team?.rawValue
         var logo: NSImage?
-        if let team = configuration.team, let (data, _) = try? await URLSession.shared.data(from: team.logoURL) {
-            logo = NSImage(data: data)
-        }
+        if let backgroundTeam { logo = await Logos.image(backgroundTeam) }
         let minutes: Double = standings == nil ? 15 : 30
-        return Timeline(entries: [Entry(date: .now, conference: conference, standings: standings, logo: logo)],
+        return Timeline(entries: [Entry(date: .now, conference: conference, standings: standings, team: team, logo: logo)],
                         policy: .after(.now.addingTimeInterval(minutes * 60)))
     }
 }
@@ -51,7 +77,8 @@ struct StandingsView: View {
     var body: some View {
         // Logo lives in the content layer, not containerBackground, so it survives glass/tinted modes
         // where the system removes the background.
-        content.background {
+        // Top-aligned so the header row sits at the same spot on the standings and detail pages.
+        content.frame(maxHeight: .infinity, alignment: .top).background {
             if let logo = entry.logo {
                 Image(nsImage: logo).resizable().widgetAccentedRenderingMode(.fullColor)
                     .scaledToFit().padding(8).opacity(0.2)
@@ -61,7 +88,9 @@ struct StandingsView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let s = entry.standings {
+        if let team = entry.team {
+            detail(team)
+        } else if let s = entry.standings {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 0) {
                 header.padding(.bottom, 6)
                 GridRow(alignment: .lastTextBaseline) {
@@ -103,6 +132,44 @@ struct StandingsView: View {
         .font(.system(size: 14, weight: .bold))
     }
 
+    private func detail(_ t: Team) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 0) {
+            ZStack {
+                Text(t.name)
+                HStack {
+                    Button(intent: ShowStandings()) { Image(systemName: "chevron.left") }.buttonStyle(.plain)
+                    Spacer()
+                }
+            }
+            .font(.system(size: 14, weight: .bold))
+            .padding(.bottom, 6)
+            sectionTitle("Season")
+            stat("Record", t.record)
+            stat("Points", "\(t.points) in \(t.gamesPlayed) GP")
+            stat("Points %", String(format: "%.3f", t.pointPctg))
+            sectionTitle("Rank")
+            stat("Division", "#\(t.divisionSequence)")
+            stat("Conference", "#\(t.conferenceSequence)")
+            stat("League", "#\(t.leagueSequence)")
+            sectionTitle("Goals")
+            stat("For / Against", "\(t.goalFor) / \(t.goalAgainst)")
+            stat("Differential", t.goalDifferential.formatted(.number.sign(strategy: .always(includingZero: false))))
+            sectionTitle("Form")
+            stat("Home", t.homeRecord)
+            stat("Road", t.roadRecord)
+            stat("Last 10", t.lastTenRecord)
+            stat("Streak", t.streak)
+        }
+        .font(.system(size: 11).monospacedDigit())
+    }
+
+    private func stat(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label).foregroundStyle(.secondary).padding(.leading, 6).frame(maxWidth: .infinity, alignment: .leading)
+            Text(value).fontWeight(.semibold).gridColumnAlignment(.trailing)
+        }
+    }
+
     @ViewBuilder
     private func section(_ title: String, _ teams: [Team]) -> some View {
         sectionTitle(title)
@@ -116,7 +183,7 @@ struct StandingsView: View {
     private func rows(_ teams: [Team]) -> some View {
         ForEach(teams, id: \.abbrev) { t in
             GridRow {
-                Text(t.abbrev).padding(.leading, 6)
+                Button(intent: ShowTeam(t.abbrev)) { Text(t.abbrev) }.buttonStyle(.plain).padding(.leading, 6)
                 Text("\(t.gamesPlayed)").foregroundStyle(.secondary)
                 Text("\(t.wins)-\(t.losses)-\(t.otLosses)").foregroundStyle(.secondary)
                 Text("\(t.points)").fontWeight(.semibold)
@@ -132,7 +199,7 @@ struct StandingsWidget: Widget {
             StandingsView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("NHL Standings")
-        .description("NHL wild-card standings. Tap the arrows to switch conference.")
+        .description("NHL wild-card standings. Tap the arrows to switch conference, or a team for details.")
         .supportedFamilies([.systemLarge])
     }
 }
