@@ -1,3 +1,4 @@
+import WidgetKit
 import XCTest
 
 private struct FakeStandings: StandingsService {
@@ -19,6 +20,8 @@ private final class FakeState: WidgetStateStore {
 }
 
 final class ViewModelTests: XCTestCase {
+    override func setUp() { StubURLProtocol.install() }
+
     private func fixture() throws -> ConferenceStandings {
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "fixture", withExtension: "json"))
         return try ConferenceStandings.decode(Data(contentsOf: url), conference: .west)
@@ -76,5 +79,31 @@ final class ViewModelTests: XCTestCase {
         XCTAssertEqual(title, "Eastern Conference")
         XCTAssertNil(entry.logo)
         XCTAssertFalse(entry.isFresh)
+    }
+
+    func testTimelineRefreshesSoonerWhenStale() async throws {
+        let now = Date(timeIntervalSince1970: 0)
+        let fresh = await Provider(standingsService: FakeStandings(result: (try fixture(), nil)),
+                                   logoService: FakeLogos(), state: FakeState()).timeline(favorite: nil, now: now)
+        XCTAssertEqual(fresh.entries.map(\.date), [now])
+        XCTAssertEqual(fresh.policy, .after(now.addingTimeInterval(30 * 60)))
+
+        let stale = await Provider(standingsService: FakeStandings(result: nil),
+                                   logoService: FakeLogos(), state: FakeState()).timeline(favorite: nil, now: now)
+        XCTAssertEqual(stale.policy, .after(now.addingTimeInterval(15 * 60)))
+    }
+
+    func testPlaceholderShowsSample() {
+        guard case .standings(let model) = Provider.placeholder.content else { return XCTFail("expected standings") }
+        XCTAssertEqual(model.sections[0].rows.map(\.abbrev), ["COL", "MIN", "UTA"])
+    }
+
+    func testProductionDefaults() {
+        let provider = Provider()
+        XCTAssertEqual((provider.standingsService as? NHLStandingsService)?.cacheFile.lastPathComponent, "standings.json")
+        XCTAssertTrue((provider.standingsService as? NHLStandingsService)?.session === URLSession.shared)
+        XCTAssertTrue((provider.logoService as? NHLLogoService)?.session === URLSession.shared)
+        XCTAssertEqual((provider.logoService as? NHLLogoService)?.cacheDir.lastPathComponent, "Caches")
+        XCTAssertTrue(provider.state is UserDefaultsWidgetState)
     }
 }

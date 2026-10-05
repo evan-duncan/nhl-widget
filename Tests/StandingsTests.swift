@@ -1,6 +1,8 @@
 import XCTest
 
 final class StandingsTests: XCTestCase {
+    override func setUp() { StubURLProtocol.install() }
+
     private func fixture(_ conference: Conference) throws -> ConferenceStandings {
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "fixture", withExtension: "json"))
         return try ConferenceStandings.decode(Data(contentsOf: url), conference: conference)
@@ -44,35 +46,69 @@ final class StandingsTests: XCTestCase {
         XCTAssertNil(s.team("BOS"))
     }
 
-    func testLogoReadsFromCacheWithoutNetwork() async throws {
+    private func tempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let svg = #"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>"#
-        try Data(svg.utf8).write(to: dir.appendingPathComponent("ZZZ.svg"))
-        let image = await NHLLogoService(cacheDir: dir).image("ZZZ")
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        return dir
+    }
+
+    private let svg = Data(#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>"#.utf8)
+
+    func testLogoReadsFromCacheWithoutNetwork() async throws {
+        let dir = try tempDir()
+        try svg.write(to: dir.appendingPathComponent("ZZZ.svg"))
+        let requests = StubURLProtocol.respond(500)
+        let image = await NHLLogoService(cacheDir: dir, session: StubURLProtocol.session).image("ZZZ")
         XCTAssertEqual(image?.size, NSSize(width: 10, height: 10))
+        XCTAssertEqual(requests(), [])
+    }
+
+    func testLogoDownloadsAndCaches() async throws {
+        let dir = try tempDir()
+        let requests = StubURLProtocol.respond(200, svg)
+        let image = await NHLLogoService(cacheDir: dir, session: StubURLProtocol.session).image("COL")
+        XCTAssertEqual(image?.size, NSSize(width: 10, height: 10))
+        XCTAssertEqual(requests(), [NHLLogoService.url("COL")])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("COL.svg").path))
+    }
+
+    func testLogoFailureReturnsNil() async throws {
+        let dir = try tempDir()
+        _ = StubURLProtocol.respond(404)
+        let missing = await NHLLogoService(cacheDir: dir, session: StubURLProtocol.session).image("COL")
+        XCTAssertNil(missing)
+        StubURLProtocol.handler = StubURLProtocol.unstubbed
+        let offline = await NHLLogoService(cacheDir: dir, session: StubURLProtocol.session).image("COL")
+        XCTAssertNil(offline)
     }
 
     func testLoadCachesAndFallsBack() async throws {
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "fixture", withExtension: "json"))
         let fixtureData = try Data(contentsOf: url)
-        let cache = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
+        let service = NHLStandingsService(cacheFile: try tempDir().appendingPathComponent("standings.json"),
+                                          session: StubURLProtocol.session)
 
-        let freshResult = await NHLStandingsService(cacheFile: cache) { fixtureData }.load(.west)
+        let requests = StubURLProtocol.respond(200, fixtureData)
+        let freshResult = await service.load(.west)
         let fresh = try XCTUnwrap(freshResult)
         XCTAssertNil(fresh.staleSince)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: cache.path))
+        XCTAssertEqual(requests().map(\.absoluteString), ["https://api-web.nhle.com/v1/standings/now"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.cacheFile.path))
 
-        let staleResult = await NHLStandingsService(cacheFile: cache) { throw URLError(.notConnectedToInternet) }.load(.west)
+        _ = StubURLProtocol.respond(503)
+        let staleResult = await service.load(.west)
         let stale = try XCTUnwrap(staleResult)
         XCTAssertNotNil(stale.staleSince)
         XCTAssertEqual(stale.standings.divisions[0].teams.map(\.abbrev), ["COL", "MIN", "UTA"])
 
-        let badResult = await NHLStandingsService(cacheFile: cache) { Data("<html>".utf8) }.load(.west)
+        _ = StubURLProtocol.respond(200, Data("<html>".utf8))
+        let badResult = await service.load(.west)
         XCTAssertNotNil(try XCTUnwrap(badResult).staleSince)
 
-        try FileManager.default.removeItem(at: cache)
-        let none = await NHLStandingsService(cacheFile: cache) { throw URLError(.notConnectedToInternet) }.load(.west)
+        try FileManager.default.removeItem(at: service.cacheFile)
+        StubURLProtocol.handler = StubURLProtocol.unstubbed
+        let none = await service.load(.west)
         XCTAssertNil(none)
     }
 

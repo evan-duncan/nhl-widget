@@ -15,7 +15,7 @@ targets:
   StandingsTests:
     type: bundle.unit-test
     platform: macOS
-    sources: [Tests, Widget/Standings.swift, Widget/NHLAPI.swift, Widget/Teams.swift, Widget/Intents.swift, Widget/ViewModels.swift, Widget/Provider.swift]
+    sources: [Tests, Widget/Standings.swift, Widget/NHLAPI.swift, Widget/Teams.swift, Widget/Intents.swift, Widget/ViewModels.swift, Widget/Provider.swift, Widget/StandingsView.swift]
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

@@ -22,17 +22,17 @@ extension ConferenceStandings {
 
 struct NHLStandingsService: StandingsService {
     var cacheFile = cachesDirectory.appendingPathComponent("standings.json")
-    var fetch: () async throws -> Data = NHLStandingsService.fetchData
+    var session = URLSession.shared
 
-    static func fetchData() async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(from: URL(string: "https://api-web.nhle.com/v1/standings/now")!)
+    func fetchData() async throws -> Data {
+        let (data, response) = try await session.data(from: URL(string: "https://api-web.nhle.com/v1/standings/now")!)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
         return data
     }
 
     /// Fresh standings when the fetch decodes; otherwise the last good response, with `staleSince` set to when it was saved.
     func load(_ conference: Conference) async -> (standings: ConferenceStandings, staleSince: Date?)? {
-        if let data = try? await fetch(), let standings = try? ConferenceStandings.decode(data, conference: conference) {
+        if let data = try? await fetchData(), let standings = try? ConferenceStandings.decode(data, conference: conference) {
             try? data.write(to: cacheFile)
             return (standings, nil)
         }
@@ -45,6 +45,7 @@ struct NHLStandingsService: StandingsService {
 
 struct NHLLogoService: LogoService {
     var cacheDir = cachesDirectory
+    var session = URLSession.shared
 
     static func url(_ abbrev: String) -> URL {
         URL(string: "https://assets.nhle.com/logos/nhl/svg/\(abbrev)_light.svg")!
@@ -54,7 +55,7 @@ struct NHLLogoService: LogoService {
     func image(_ abbrev: String) async -> NSImage? {
         let file = cacheDir.appendingPathComponent("\(abbrev).svg")
         if let data = try? Data(contentsOf: file) { return NSImage(data: data) }
-        guard let (data, response) = try? await URLSession.shared.data(from: Self.url(abbrev)),
+        guard let (data, response) = try? await session.data(from: Self.url(abbrev)),
               (response as? HTTPURLResponse)?.statusCode == 200, let image = NSImage(data: data) else { return nil }
         try? data.write(to: file)
         return image

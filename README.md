@@ -38,7 +38,7 @@ A macOS desktop / Notification Center widget showing NHL wild-card standings.
 xcodebuild test -project NHLWidget.xcodeproj -scheme StandingsTests -destination 'platform=macOS'
 ```
 
-Tests run against `Tests/fixture.json`, a saved standings response, so they need no network.
+Tests run against `Tests/fixture.json`, a saved standings response. `Tests/StubURLProtocol.swift` intercepts every HTTP request, so tests never call the NHL API.
 
 ## Project layout
 
@@ -51,7 +51,7 @@ Tests run against `Tests/fixture.json`, a saved standings response, so they need
 | `Widget/ViewModels.swift` | Display-ready standings and team-detail view models |
 | `Widget/Provider.swift` | Timeline provider; builds view models from injected services |
 | `Widget/StandingsView.swift` | Renders the view models |
-| `Widget/StandingsWidget.swift` | Widget entry point |
+| `Widget/StandingsWidget.swift` | Widget entry point and WidgetKit provider glue (not unit-tested) |
 | `App/NHLWidgetApp.swift` | Minimal host app (widgets must ship inside an app) |
 | `Tests/` | Unit tests and fixture |
 
